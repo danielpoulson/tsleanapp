@@ -1,0 +1,36 @@
+.navBanner {
+  background-color: #2d62b0 !important;
+  margin-top: -2px;
+}
+.navbar {
+  display: flex;
+  height: 40px;
+  justify-content: center;
+  padding-top: 8px;
+  /* margin-top: 50px; */
+}
+
+.navContainer {
+  min-width: 100px;
+}
+
+.navbaritem,
+.navbaritem:hover {
+  /* color: var(--main-theme-color-4-4, grey); */
+  text-decoration: none;
+  font-size: 1.2rem;
+  font-weight: 600;
+  font-family: "Lato", sans-serif;
+  /* padding-right: 20px; */
+}
+
+.navbaritem {
+  color: white;
+  line-height: 1.5;
+  border-bottom: solid 4px #2d62b0;
+}
+
+.navbaritem:hover {
+  color: white;
+  border-bottom: solid 4px white;
+}

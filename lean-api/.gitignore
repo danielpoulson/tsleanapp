@@ -1,0 +1,5 @@
+dist
+node_modules
+util\config.js
+# API keys and secrets
+*.env

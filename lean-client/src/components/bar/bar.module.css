@@ -1,0 +1,12 @@
+.graphContainer {
+  height: 330px;
+  width: 680px;
+  margin-top: 2px;
+  background: white;
+}
+
+@media only screen and (max-width: 600px) {
+  .graphContainer {
+    width: 80vw;
+  }
+}
