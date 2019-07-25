@@ -1,6 +1,6 @@
 import moment from 'moment';
 export const getShiftSeq = () => {
-    let dpToday = '';
+    let dpToday: number = 0;
     const dayofWeek = moment().weekday();
 
     if (dayofWeek <= 1) {
@@ -21,7 +21,7 @@ export const getShiftSeq = () => {
         .substring(0, 8);
 };
 
-export const timeConvert = n => {
+export const timeConvert = (n: number) => {
     var hours = n / 60;
     var rhours = Math.floor(hours);
     var minutes = (hours - rhours) * 60;

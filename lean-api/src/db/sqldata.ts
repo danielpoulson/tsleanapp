@@ -1,5 +1,4 @@
-import sql from 'mssql';
-import moment from 'moment';
+import { ConnectionPool, IResult } from 'mssql';
 import { timeConvert } from '../utils/helpers';
 
 const config = {
@@ -9,66 +8,153 @@ const config = {
     database: 'MATTEC_PROHELP',
 };
 
-const createMonthData = r => {
-    const rtd = {};
+interface MainData {
+    machno: number;
+    downpc: number;
+    units: number;
+    avail: number;
+    perf: number;
+    oee: number;
+    idle: number;
+    unitsmin: number;
+}
+
+interface MonthData extends MainData {
+    runtime: number;
+    downtime: number;
+}
+
+interface DailyData extends MainData {
+    runtime: string;
+    shiftseq: string;
+    downnone: number;
+    downtime: string;
+}
+
+interface MachineData {
+    MachNo: number;
+    Target: number;
+    Total: number;
+    TotalTime: number;
+    DownTime: number;
+}
+
+interface MachDaily extends MachineData {
+    RunTime: number;
+    DownFreq: number;
+}
+
+interface MachMonthly extends MachineData {
+    Defects: number;
+    Down_Amount: number;
+}
+
+interface DownCount {
+    MachNo: number;
+    Total: number;
+    Occur: number;
+}
+
+interface MainDataBundle {
+    day?: DailyData;
+    month?: MonthData;
+    downPareto?: {
+        labels: string[];
+        values: number[];
+        pareto: number[];
+    };
+}
+
+const createMonthData = (r: MachMonthly): MonthData => {
+    let rtd: MonthData;
+
+    rtd = {
+        machno: 1,
+        runtime: 0,
+        downtime: 0,
+        downpc: 0,
+        units: 0,
+        avail: 0,
+        perf: 0,
+        oee: 0,
+        idle: 0,
+        unitsmin: 0,
+    };
+
     rtd.machno = r.MachNo;
     rtd.runtime = Math.round((r.TotalTime - r.DownTime) / 60);
     rtd.downtime = Math.round(r.DownTime / 60);
-    rtd.downpc = ((r.DownTime / r.TotalTime) * 100).toFixed(1);
+    rtd.downpc = +((r.DownTime / r.TotalTime) * 100).toFixed(1);
     rtd.units = r.Total;
 
     if (r.Total > 0) {
-        rtd.avail = ((1 - r.DownTime / r.TotalTime) * 100).toFixed(1);
-        rtd.perf = ((r.Total / r.Target) * 100).toFixed(1);
-        rtd.oee = ((rtd.avail * rtd.perf) / 100).toFixed(1);
+        rtd.avail = +((1 - r.DownTime / r.TotalTime) * 100).toFixed(1);
+        rtd.perf = +((r.Total / r.Target) * 100).toFixed(1);
+        rtd.oee = +((rtd.avail * rtd.perf) / 100).toFixed(1);
     }
     rtd.idle = 480 - (rtd.runtime + rtd.downtime);
-    rtd.unitsmin = (r.Total / (rtd.runtime + rtd.downtime)).toFixed(1);
+    rtd.unitsmin = +(r.Total / (rtd.runtime + rtd.downtime)).toFixed(1);
     return rtd;
 };
 
-const createDayData = (r, down) => {
-    const rtd = {};
+const createDayData = (r: MachDaily, down: DownCount, shiftseq: string): DailyData => {
+    let rtd: DailyData;
+
+    rtd = {
+        machno: 1,
+        runtime: '',
+        downtime: '',
+        downpc: 0,
+        units: 0,
+        avail: 0,
+        perf: 0,
+        oee: 0,
+        idle: 0,
+        unitsmin: 0,
+        shiftseq: '',
+        downnone: 0,
+    };
     const dnTotal = down.Total / 60;
     const runtime = r.RunTime;
     const downtime = r.DownTime;
 
-    rtd.shiftseq = r.ShiftSeq;
+    rtd.shiftseq = shiftseq;
     rtd.machno = r.MachNo;
     rtd.runtime = timeConvert(runtime);
     rtd.downtime = timeConvert(downtime);
-    rtd.downpc = ((downtime / r.TotalTime) * 100).toFixed(1);
+    rtd.downpc = +((downtime / r.TotalTime) * 100).toFixed(1);
     rtd.units = r.Total;
 
     if (r.Total > 0) {
-        rtd.avail = ((1 - downtime / r.TotalTime) * 100).toFixed(1);
+        rtd.avail = +((1 - downtime / r.TotalTime) * 100).toFixed(1);
         // rtd.perf = ((r.Total / (r.TotalTime - r.DownTime) * RunRate) * 100).toFixed(1)
-        rtd.perf = ((r.Total / r.Target) * 100).toFixed(1);
-        rtd.oee = ((rtd.avail * rtd.perf) / 100).toFixed(1);
+        rtd.perf = +((r.Total / r.Target) * 100).toFixed(1);
+        rtd.oee = +((rtd.avail * rtd.perf) / 100).toFixed(1);
     }
     rtd.idle = 480 - (runtime + downtime);
-    rtd.unitsmin = (r.Total / (runtime + downtime)).toFixed(1);
-    rtd.downnone = ((dnTotal / downtime) * 100).toFixed(1);
+    rtd.unitsmin = +(r.Total / (runtime + downtime)).toFixed(1);
+    rtd.downnone = +((dnTotal / downtime) * 100).toFixed(1);
+
     return rtd;
 };
 
-const getTotalDownTime = rs => {
-    const reducer = (accumulator, currentValue) => accumulator + currentValue.total;
+const getTotalDownTime = (rs: IResult<any>) => {
+    const reducer = (accumulator: number, currentValue: { total: number }) => accumulator + currentValue.total;
     return rs.recordset.reduce(reducer, 0);
 };
 
-const createDownPareto = (rs, total) => {
-    const labels = [];
-    const values = [];
-    const pareto = [];
+const createDownPareto = (rs: IResult<any>, total: number) => {
+    const labels: string[] = [];
+    const values: number[] = [];
+    const pareto: number[] = [];
     let cnt = 0;
     rs.recordset.forEach((r, i) => {
         if (i <= 8) {
-            const val = ((r.total / total) * 100).toFixed(1);
+            const val = +((r.total / total) * 100).toFixed(1);
             cnt = cnt + +val;
             labels.push(r.DownCode.trim());
             values.push(val);
-            pareto.push(cnt.toFixed(1));
+            pareto.push(+cnt.toFixed(1));
         }
     });
 
@@ -89,8 +175,8 @@ export const monthlyLineData = async (laWhere: string) => {
   Group By MachNo`;
     try {
         // make sure that any items are correctly URL encoded in the connection string
-        sql.close();
-        let pool = await sql.connect(config);
+        const pool = new ConnectionPool(config);
+        await pool.connect();
         const resultMonth = await pool.request().query(queryMonth);
 
         const month = createMonthData(resultMonth.recordset[0]);
@@ -105,7 +191,7 @@ export const monthlyLineData = async (laWhere: string) => {
     }
 };
 
-export const loadMain = async shiftseq => {
+export const loadMain = async (shiftseq: string) => {
     const query1 = `SELECT [MachNo]
      , SUM(((([TotTime]-[DownTime])/60) * [ExpCycTm])) As Target
      , SUM([CalProdQty]) As Total
@@ -126,14 +212,14 @@ export const loadMain = async shiftseq => {
 
     try {
         // make sure that any items are correctly URL encoded in the connection string
-        sql.close();
-        let pool = await sql.connect(config);
+        const pool = new ConnectionPool(config);
+        await pool.connect();
         const results = await pool.request().query(query1);
 
         const down = await pool.request().query(query2);
 
         const data = results.recordset.map((rs, i) => {
-            return createDayData(rs, down.recordset[i]);
+            return createDayData(rs, down.recordset[i], shiftseq);
         });
 
         pool.close();
@@ -145,8 +231,9 @@ export const loadMain = async shiftseq => {
 
 // TODO: Fix hard coded down query
 
-export const callDB = async (shiftseq, monthseq, id) => {
-    const data = {};
+export const callDB = async (shiftseq: string, monthseq: string, id: string) => {
+    let data: MainDataBundle;
+    data = {};
 
     const query1 = `SELECT [MachNo]
      , SUM(((([TotTime]-[DownTime])/60) * [ExpCycTm])) As Target
@@ -188,15 +275,15 @@ export const callDB = async (shiftseq, monthseq, id) => {
 
     try {
         // make sure that any items are correctly URL encoded in the connection string
-        sql.close();
-        let pool = await sql.connect(config);
+        const pool = new ConnectionPool(config);
+        await pool.connect();
         const result1 = await pool.request().query(query1);
 
         const down = await pool.request().query(query2);
         const resultMonth = await pool.request().query(queryMonth);
         const rsDownPareto = await pool.request().query(downQuery);
 
-        const day = createDayData(result1.recordset[0], down.recordset[0]);
+        const day = createDayData(result1.recordset[0], down.recordset[0], shiftseq);
 
         const month = createMonthData(resultMonth.recordset[0]);
 
