@@ -1,5 +1,5 @@
-import { ConnectionPool, IResult } from 'mssql';
-import { timeConvert } from '../utils/helpers';
+const { ConnectionPool } = require('mssql');
+const { timeConvert } = require('../utils/helpers');
 
 const config = {
     user: 'deltapp',
@@ -8,65 +8,8 @@ const config = {
     database: 'MATTEC_PROHELP',
 };
 
-interface MainData {
-    machno: number;
-    downpc: number;
-    units: number;
-    avail: number;
-    perf: number;
-    oee: number;
-    idle: number;
-    unitsmin: number;
-}
-
-interface MonthData extends MainData {
-    runtime: number;
-    downtime: number;
-}
-
-interface DailyData extends MainData {
-    runtime: string;
-    shiftseq: string;
-    downnone: number;
-    downtime: string;
-}
-
-interface MachineData {
-    MachNo: number;
-    Target: number;
-    Total: number;
-    TotalTime: number;
-    DownTime: number;
-}
-
-interface MachDaily extends MachineData {
-    RunTime: number;
-    DownFreq: number;
-}
-
-interface MachMonthly extends MachineData {
-    Defects: number;
-    Down_Amount: number;
-}
-
-interface DownCount {
-    MachNo: number;
-    Total: number;
-    Occur: number;
-}
-
-interface MainDataBundle {
-    day?: DailyData;
-    month?: MonthData;
-    downPareto?: {
-        labels: string[];
-        values: number[];
-        pareto: number[];
-    };
-}
-
-const createMonthData = (r: MachMonthly): MonthData => {
-    let rtd: MonthData;
+const createMonthData = (r) => {
+    let rtd;
 
     rtd = {
         machno: 1,
@@ -97,8 +40,8 @@ const createMonthData = (r: MachMonthly): MonthData => {
     return rtd;
 };
 
-const createDayData = (r: MachDaily, down: DownCount, shiftseq: string): DailyData => {
-    let rtd: DailyData;
+const createDayData = (r, down, shiftseq) => {
+    let rtd;
 
     rtd = {
         machno: 1,
@@ -138,15 +81,15 @@ const createDayData = (r: MachDaily, down: DownCount, shiftseq: string): DailyDa
     return rtd;
 };
 
-const getTotalDownTime = (rs: IResult<any>) => {
-    const reducer = (accumulator: number, currentValue: { total: number }) => accumulator + currentValue.total;
+const getTotalDownTime = (rs) => {
+    const reducer = (accumulator, currentValue) => accumulator + currentValue.total;
     return rs.recordset.reduce(reducer, 0);
 };
 
-const createDownPareto = (rs: IResult<any>, total: number) => {
-    const labels: string[] = [];
-    const values: number[] = [];
-    const pareto: number[] = [];
+const createDownPareto = (rs, total) => {
+    const labels = [];
+    const values = [];
+    const pareto = [];
     let cnt = 0;
     rs.recordset.forEach((r, i) => {
         if (i <= 8) {
@@ -162,7 +105,7 @@ const createDownPareto = (rs: IResult<any>, total: number) => {
 };
 
 // Not in use
-export const monthlyLineData = async (laWhere: string) => {
+exports.monthlyLineData = async (laWhere) => {
     const queryMonth = `SELECT MachNo
   ,SUM([ExpProdQty]) Target
   ,SUM([CalProdQty]) Total
@@ -191,7 +134,7 @@ export const monthlyLineData = async (laWhere: string) => {
     }
 };
 
-export const loadMain = async (shiftseq: string) => {
+exports.loadMain = async (shiftseq) => {
     const query1 = `SELECT [MachNo]
      , SUM(((([TotTime]-[DownTime])/60) * [ExpCycTm])) As Target
      , SUM([CalProdQty]) As Total
@@ -231,8 +174,8 @@ export const loadMain = async (shiftseq: string) => {
 
 // TODO: Fix hard coded down query
 
-export const callDB = async (shiftseq: string, monthseq: string, id: string) => {
-    let data: MainDataBundle;
+exports.callDB = async (shiftseq, monthseq, id) => {
+    let data;
     data = {};
 
     const query1 = `SELECT [MachNo]
